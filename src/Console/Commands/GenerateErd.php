@@ -19,9 +19,11 @@ class GenerateErd extends Command
         {--path=} 
         {--regex=\'*.php\'} 
         {--excludes=}
-        {--graceful : Return a successful exit code even if an error occurs}';
+        {--graceful : Return a successful exit code even if an error occurs}
+        {--sql-compatibility : Creates a temporary MySQL DB instead of in-memory SQLite. Useful for resolving migration errors.}';
 
     private array $backup = [];
+    private bool $compatibilityMode = false;
 
     /**
      * @throws Throwable
@@ -34,6 +36,7 @@ class GenerateErd extends Command
         $regex = trim($this->option('regex'), "\"'");
         $excludes = preg_split('/\s*,\s*/', $this->option('excludes') ?? '');
         $file = $this->getFile($config, $database);
+        $this->compatibilityMode = $this->option('sql-compatibility');
 
         try {
             $this->setupFakeDatabase($database);
@@ -89,8 +92,8 @@ class GenerateErd extends Command
 
         config(['cache.default' => 'array']);
         config(Arr::dot(array_map(static fn (array $config) => [
-            'driver' => 'sqlite',
-            'database' => ':memory:',
+            'driver' => $this->getFakeDriver(),
+            'database' => $this->getFakeDatabase(),
             'prefix' => $config['prefix'] ?? '',
             'foreign_key_constraints' => true,
             'busy_timeout' => null,
@@ -120,5 +123,23 @@ class GenerateErd extends Command
         $file = ! File::extension($file) ? $file.'.'.($config['extension'] ?? 'sql') : $file;
 
         return $path.'/'.$file;
+    }
+    
+    private function getFakeDriver(): string
+    {
+        return $this->compatibilityMode ? 'mysql' : 'sqlite';
+    }
+
+    private function getFakeDatabase(): string
+    {
+        return ($this->compatibilityMode)
+            ? $this->createTempDB()->getName()
+            : ':memory:';
+    }
+
+    private function createTempDB: void
+    {
+        // Move this to a helper class
+        // Add DBAL support
     }
 }
